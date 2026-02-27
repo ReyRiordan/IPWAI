@@ -29,9 +29,8 @@ FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 INWORLD_API_KEY = os.getenv("INWORLD_API_KEY")
 
 PATHS = {
-    "convo_base": "./Prompts/Base_11-17-25.txt",
-    "convo_sum": "./Prompts/Summarizer_4-22.txt",
-    "patient": "./Patient_Info/JohnSmith_NEW.json"
+    "convo_base": "./prompts/patient.txt",
+    "patient": "./patients/JohnSmith.json"
 }
 with open(PATHS["convo_base"], "r", encoding="utf8") as base_file:
     BASE_PROMPT = base_file.read()
@@ -59,44 +58,6 @@ def process_case(case: dict):
 base = str(BASE_PROMPT.replace("{patient}", PATIENT['case']['demographics']['name']))
 CONVO_PROMPT = base + process_case(PATIENT['case'])
 print(CONVO_PROMPT)
-
-
-# ASR
-import nemo.collections.asr as nemo_asr
-class ParakeetSTT:
-    def __init__(self):
-        self.model = nemo_asr.models.ASRModel.from_pretrained("nvidia/parakeet-tdt-0.6b-v2")
-
-    def stt(self, audio: tuple[int, NDArray[np.int16 | np.float32]]) -> str:
-        """audio = (sample_rate, np.ndarray)"""
-        sr, arr = audio
-        # Expecting mono. If shape is (1, N), squeeze to (N,)
-        if arr.ndim > 1:
-            arr = np.squeeze(arr, axis=0)
-
-        # Ensure int16 PCM for WAV
-        if arr.dtype != np.int16:
-            arr = np.clip(arr, -1.0, 1.0)
-            arr = (arr * 32767.0).astype(np.int16)
-
-        # Write temp WAV and transcribe
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            tmp_path = f.name
-        try:
-            sf.write(tmp_path, arr, sr, subtype="PCM_16")
-            result = self.model.transcribe([tmp_path])[0]
-            # Some NeMo versions return dict/list; handle both
-            text = getattr(result, "text", None)
-            if text is None and isinstance(result, dict):
-                text = result.get("text", "")
-            if text is None and isinstance(result, str):
-                text = result
-            return text or ""
-        finally:
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
 
 class WhisperSTT:
     def __init__(self, api_key: str):
@@ -217,13 +178,6 @@ class InworldTTS:
             except Exception as e:
                 print(f"Error processing chunk: {e}, Line: {line}")
                 continue
-    
-# TTS = get_tts_model(model="kokoro")
-# tts_options = KokoroTTSOptions(
-#     voice=os.getenv("KOKORO_VOICE", "am_puck"),
-#     speed=float(os.getenv("KOKORO_SPEED", "1.2")),
-#     lang=os.getenv("KOKORO_LANG", "en-us"),
-# )
 
 TTS = InworldTTS()
 tts_options = {
