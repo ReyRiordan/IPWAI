@@ -27,6 +27,7 @@ load_dotenv('.env')
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 FIREWORKS_API_KEY = os.getenv("FIREWORKS_API_KEY")
 INWORLD_API_KEY = os.getenv("INWORLD_API_KEY")
+MINIMAX_API_KEY = os.getenv("MINIMAX_API_KEY")
 
 PATHS = {
     "convo_base": "./prompts/patient.txt",
@@ -178,6 +179,40 @@ class InworldTTS:
             except Exception as e:
                 print(f"Error processing chunk: {e}, Line: {line}")
                 continue
+
+class MinimaxTTS:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.url = "https://api.minimax.io/v1/t2a_v2"
+
+    def stream_tts_sync(self, response_text: str, options: dict):
+        sample_rate = 32000
+        payload = {
+            "model": "speech-2.6-hd",
+            "text": response_text,
+            "voice_id": options['voice'],
+            "speed": options.get('speed', 1.0),
+            "vol": 1.0,
+            "pitch": 0,
+            "audio_sample_rate": sample_rate,
+            "bitrate": 128000,
+            "format": "pcm",
+        }
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(self.url, json=payload, headers=headers)
+        response.raise_for_status()
+
+        data = response.json()
+        if data.get("base_resp", {}).get("status_code") != 0:
+            raise Exception(f"Minimax TTS error: {data['base_resp']['status_msg']}")
+
+        audio_bytes = base64.b64decode(data["audio_file"])
+        waveform = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+        yield (sample_rate, waveform)
+
 
 TTS = InworldTTS()
 tts_options = {
